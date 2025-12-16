@@ -18,7 +18,7 @@ import {
   TopNavigation
 } from "@cloudscape-design/components";
 import PropTypes from 'prop-types';
-import * as AWSAuth from '@aws-amplify/auth';
+import { fetchAuthSession, signOut } from 'aws-amplify/auth';
 import { BedrockAgentRuntimeClient, InvokeAgentCommand } from "@aws-sdk/client-bedrock-agent-runtime";
 import { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } from "@aws-sdk/client-bedrock-agentcore";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
@@ -188,7 +188,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
         setIsAgentCoreAgent(agentCoreConfig && agentCoreConfig.enabled);
         
         // Fetch AWS authentication session
-        const session = await AWSAuth.fetchAuthSession();
+        const session = await fetchAuthSession();
         
         // Initialize Bedrock client if needed
         if (!strandsConfig?.enabled && !agentCoreConfig?.enabled) {
@@ -271,7 +271,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
         if (!isStrandsAgent && bedrockClient) {
           const bedrockConfig = appConfig.bedrock;
           const sessionAttributes = {
-            aws_session: await AWSAuth.fetchAuthSession()
+            aws_session: await fetchAuthSession()
           };
 
           const command = new InvokeAgentCommand({
@@ -414,7 +414,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
 
   const handleLogout = async () => {
     try {
-      await AWSAuth.signOut();
+      await signOut();
       onLogout();
     } catch (error) {
       console.error('Error signing out: ', error);
