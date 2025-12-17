@@ -139,6 +139,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
    */
   const storeMessages = useCallback((sessionId, newMessages) => {
     // Retrieve existing messages for the session
+    console.log("newMessages is", newMessages)
     const currentMessages = fetchMessagesForSession(sessionId);
     // Merge existing and new messages
     const updatedMessages = [...currentMessages, ...newMessages];
@@ -389,7 +390,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
           
           const parsedResponse = JSON.parse(responseBody);
           const responseText = parsedResponse.result || "Sorry, I couldn't process your request.";
-          agentMessage = { text: responseText, sender: agentName.value };
+          agentMessage = { text: responseText.content[0].text || '', sender: agentName.value };
         } else {
           throw new Error("No agent client available");
         }
