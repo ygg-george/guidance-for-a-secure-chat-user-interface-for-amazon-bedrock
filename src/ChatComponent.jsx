@@ -41,7 +41,6 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
   const [agentCoreClient, setAgentCoreClient] = useState(null);
   // Array of chat messages in the conversation
   const [messages, setMessages] = useState([]);
-  console.log("Sk Debug", messages);
   // Current message being composed by the user
   const [newMessage, setNewMessage] = useState('');
   // Unique identifier for the current chat session
@@ -60,6 +59,25 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
   const [isStrandsAgent, setIsStrandsAgent] = useState(false);
   // Flag to determine if using AgentCore Agent
   const [isAgentCoreAgent, setIsAgentCoreAgent] = useState(false);
+  // Array of all sessions
+  const [sessions, setSessions] = useState([]);
+
+  // Effect hook to load sessions from localStorage
+  useEffect(() => {
+    const sessionData = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('messages_agentcore-session-')) {
+        const value = localStorage.getItem(key);
+        const JSONValue = value ? JSON.parse(value) : null;
+        const title = JSONValue?.length > 0 ? JSONValue[0].text : null;
+        title && sessionData.push({ key, title });
+      }
+    }
+    setSessions(sessionData);
+  }, [sessionId]);
+
+  console.log("Sessions", sessions);
 
   /**
   * Scrolls the chat window to the most recent message
@@ -139,7 +157,6 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
    */
   const storeMessages = useCallback((sessionId, newMessages) => {
     // Retrieve existing messages for the session
-    console.log("newMessages is", newMessages)
     const currentMessages = fetchMessagesForSession(sessionId);
     // Merge existing and new messages
     const updatedMessages = [...currentMessages, ...newMessages];
@@ -166,6 +183,8 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
     }
   }, [createNewSession, fetchMessagesForSession]);
 
+
+
   /**
    * Effect hook to initialize AWS Bedrock client and fetch credentials
    * Sets up the connection to AWS Bedrock service using stored configuration
@@ -181,17 +200,17 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
         const appConfig = JSON.parse(localStorage.getItem('appConfig'));
         const bedrockConfig = appConfig.bedrock;
         const strandsConfig = appConfig.strands;
-        
+
         // Check if Strands Agent is enabled
         setIsStrandsAgent(strandsConfig && strandsConfig.enabled);
-        
+
         // Check if AgentCore Agent is enabled
         const agentCoreConfig = appConfig.agentcore;
         setIsAgentCoreAgent(agentCoreConfig && agentCoreConfig.enabled);
-        
+
         // Fetch AWS authentication session
         const session = await fetchAuthSession();
-        
+
         // Initialize Bedrock client if needed
         if (!strandsConfig?.enabled && !agentCoreConfig?.enabled) {
           const newBedrockClient = new BedrockAgentRuntimeClient({
@@ -202,7 +221,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
           if (bedrockConfig.agentName && bedrockConfig.agentName.trim()) {
             setAgentName({ value: bedrockConfig.agentName });
           }
-        } 
+        }
         // Initialize Lambda client for Strands Agent
         else if (strandsConfig && strandsConfig.enabled && !agentCoreConfig?.enabled) {
           const newLambdaClient = new LambdaClient({
@@ -258,7 +277,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
     // Only proceed if we have a message and active session
     if (newMessage.trim() && sessionId) {
       const appConfig = JSON.parse(localStorage.getItem('appConfig'));
-      
+
       // Clear input field
       setNewMessage('');
       // Create message object with user information
@@ -268,7 +287,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
 
       try {
         let agentMessage;
-        
+
         // Handle Bedrock Agent
         if (!isStrandsAgent && bedrockClient) {
           const bedrockConfig = appConfig.bedrock;
@@ -316,33 +335,33 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
 
           console.log('Full completion:', completion);
           agentMessage = { text: completion, sender: agentName.value };
-        } 
+        }
         // Handle Strands Agent
         else if (isStrandsAgent && lambdaClient) {
           const strandsConfig = appConfig.strands;
-          
+
           // Prepare payload for Lambda function
           const payload = {
             query: newMessage
           };
-          
+
           // Extract Lambda function name from ARN
           const lambdaArn = strandsConfig.lambdaArn;
-          
+
           const command = new InvokeCommand({
             FunctionName: lambdaArn,
             Payload: JSON.stringify(payload),
             InvocationType: 'RequestResponse'
           });
-          
+
           const response = await lambdaClient.send(command);
-          
+
           // Process Lambda response
           const responseBody = new TextDecoder().decode(response.Payload);
           const parsedResponse = JSON.parse(responseBody);
-          
+
           console.log('Lambda response:', parsedResponse);
-          
+
           // Extract the response text from the Lambda result
           let responseText;
           if (parsedResponse.body) {
@@ -353,13 +372,13 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
           } else {
             responseText = "Sorry, I couldn't process your request.";
           }
-          
+
           agentMessage = { text: responseText, sender: agentName.value };
         }
         // Handle AgentCore Agent
         else if (isAgentCoreAgent && agentCoreClient) {
           const agentCoreConfig = appConfig.agentcore;
-          
+
           const command = new InvokeAgentRuntimeCommand({
             agentRuntimeArn: agentCoreConfig.agentArn,
             runtimeSessionId: sessionId,
@@ -367,14 +386,14 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
           });
 
           const response = await agentCoreClient.send(command);
-          
+
           // Handle ReadableStream response
           let responseBody = '';
           if (response.response && response.response.getReader) {
             const reader = response.response.getReader();
             const decoder = new TextDecoder();
             let done = false;
-            
+
             while (!done) {
               const { value, done: streamDone } = await reader.read();
               done = streamDone;
@@ -385,9 +404,9 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
           } else {
             responseBody = response.response || '';
           }
-          
+
           console.log('AgentCore raw response:', responseBody);
-          
+
           const parsedResponse = JSON.parse(responseBody);
           const responseText = parsedResponse.result || "Sorry, I couldn't process your request.";
           agentMessage = { text: responseText.content[0].text || '', sender: agentName.value };
@@ -402,7 +421,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
       } catch (err) {
         console.error('Error invoking agent:', err);
 
-        let errReason = "**"+String(err).toString()+"**";
+        let errReason = "**" + String(err).toString() + "**";
 
         const errorMessage = { text: `An error occurred while processing your request:\n${errReason}`, sender: 'agent' };
         setMessages(prevMessages => [...prevMessages, errorMessage]);
@@ -437,6 +456,27 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
             }}
             utilities={
               [
+                //This is a menu dropdown to select a conversation
+                {
+                  type: "menu-dropdown",
+                  iconName: "menu",
+                  ariaLabel: "Select a conversation",
+                  title: "Select a conversation",
+                  disableUtilityCollapse: true,
+                  onItemClick: ({ detail }) => {
+                    const selectedKey = detail.id;
+                    // The key is stored as 'messages_' + sessionId, so we strip the prefix
+                    const newSessionId = selectedKey.replace('messages_', '');
+                    setSessionId(newSessionId);
+                    localStorage.setItem('lastSessionId', newSessionId);
+                    const loadedMessages = fetchMessagesForSession(newSessionId);
+                    setMessages(loadedMessages);
+                  },
+                  items: sessions.map(session => ({
+                    id: session.key,
+                    text: session.title,
+                  }))
+                },
                 //This is the button to start a new conversation
                 {
                   type: "button",
@@ -524,7 +564,6 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
                     />
                   }
                 >
-                  { console.log("Debug", message?.text) }
                   {message?.text && (message.text).split('\n').map((line, i) => (
                     <ReactMarkdown
                       key={'md-rendering' + i}
