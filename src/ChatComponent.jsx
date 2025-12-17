@@ -41,6 +41,7 @@ const ChatComponent = ({ user, onLogout, onConfigEditorClick }) => {
   const [agentCoreClient, setAgentCoreClient] = useState(null);
   // Array of chat messages in the conversation
   const [messages, setMessages] = useState([]);
+  console.log("Sk Debug", messages);
   // Current message being composed by the user
   const [newMessage, setNewMessage] = useState('');
   // Unique identifier for the current chat session
